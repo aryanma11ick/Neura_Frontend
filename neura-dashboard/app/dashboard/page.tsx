@@ -1,110 +1,127 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { useSession, signOut } from "next-auth/react";
-import { Calendar, LogOut, Clock, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Navbar from "@/components/Navbar";
+import { useState, useMemo, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import TodaySchedule from "@/components/TodaySchedule";
+import MonthCalendar from "@/components/MonthCalendar";
+import { useEventsForRange } from "@/lib/hooks/useEvents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Calendar, Clock, Plus } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
 
+  // Always define hooks first (no conditional hooks)
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  // Month & day ranges
+  const monthStart = useMemo(
+    () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+    [selectedDate]
+  );
+  const monthEnd = useMemo(
+    () => new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59),
+    [selectedDate]
+  );
+  const dayStart = new Date(selectedDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(selectedDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  // Fetch events
+  const { events: monthEvents } = useEventsForRange(
+    monthStart.toISOString(),
+    monthEnd.toISOString()
+  );
+  const { events: dayEvents } = useEventsForRange(
+    dayStart.toISOString(),
+    dayEnd.toISOString()
+  );
+
+  // Redirect unauthenticated users
+  useEffect(() => {
+    if (status === "unauthenticated") window.location.href = "/login";
+  }, [status]);
+
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex h-screen items-center justify-center text-muted-foreground">
         Loading your dashboard...
       </div>
     );
   }
 
-  if (!session) {
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    return null;
-  }
+  if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-10">
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent"
-          >
-            Welcome, {session.user?.name?.split(" ")[0]} 👋
-          </motion.h1>
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+      <Navbar />
+      <main className="max-w-7xl mx-auto p-6 space-y-8">
+        {/* --- Top Welcome Header --- */}
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-3xl font-semibold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent"
+        >
+          Welcome back, {session.user?.name?.split(" ")[0]} 👋
+        </motion.h1>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="flex items-center gap-2 text-sm"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </Button>
-          </div>
-        </div>
-
-        {/* User Info */}
+        {/* --- Info Cards Row --- */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="grid grid-cols-1 sm:grid-cols-3 gap-6"
         >
           <InfoCard
-            icon={<Calendar className="text-indigo-500 w-6 h-6" />}
-            title="Linked Google Account"
+            icon={<Calendar className="text-indigo-500 w-5 h-5" />}
+            title="Your Email"
             value={session.user?.email ?? "Not linked"}
           />
           <InfoCard
-            icon={<Clock className="text-purple-500 w-6 h-6" />}
-            title="Next Event"
-            value="Fetching from Google Calendar..."
+            icon={<Clock className="text-purple-500 w-5 h-5" />}
+            title="Next Meeting"
+            value={getNextMeeting(dayEvents)}
           />
           <InfoCard
-            icon={<Plus className="text-pink-500 w-6 h-6" />}
-            title="Quick Action"
-            value="Add new meeting"
+            icon={<Plus className="text-pink-500 w-5 h-5" />}
+            title="Quick Actions"
+            value="Add a new meeting"
             actionLabel="Create"
-            onAction={() => alert("Coming soon!")}
+            onAction={() => alert("Add new meeting modal coming soon!")}
           />
         </motion.div>
 
-        {/* Events Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="mt-10"
-        >
-          <Card className="border border-border/50 bg-card/70 backdrop-blur-sm shadow-md">
-            <CardHeader>
-              <CardTitle className="text-xl">Today’s Schedule</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-muted-foreground text-sm">
-                Your calendar events will appear here once connected.
-              </div>
-              <div className="mt-4 flex justify-center">
-                <Button variant="outline" onClick={() => alert("Syncing soon...")}>
-                  Refresh Calendar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+        {/* --- Main Grid: Schedule + Calendar --- */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left: Today’s Schedule */}
+          <div className="w-full lg:w-[40%]">
+            <TodaySchedule selectedDate={selectedDate} events={dayEvents} />
+          </div>
+
+          {/* Right: Month Calendar */}
+          <div className="flex-1">
+            <MonthCalendar
+              events={monthEvents}
+              selectedDate={selectedDate}
+              onSelectDate={(d) => setSelectedDate(d)}
+            />
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
 
+/* -------------------- InfoCard Component -------------------- */
 function InfoCard({
   icon,
   title,
@@ -141,4 +158,18 @@ function InfoCard({
       </CardContent>
     </Card>
   );
+}
+
+/* -------------------- Helper: Next Meeting -------------------- */
+function getNextMeeting(events: any[]) {
+  if (!events?.length) return "No meetings today";
+  const now = new Date();
+  const upcoming = events.find((e: any) => new Date(e.start) > now);
+  if (!upcoming) return "No more meetings today";
+
+  const start = new Date(upcoming.start);
+  return `${start.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })} — ${upcoming.summary}`;
 }
